@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Piano</title>
+
+<style>
+body { font-family: Arial; text-align: center; }
+canvas { border:1px solid black; margin-top:20px; }
+
+.container { overflow-x:scroll; width:100%; }
+
+.keyboard {
+    position: relative;
+    width: 3000px;
+    height: 200px;
+    margin: 20px auto;
+}
+
+.white-keys { display:flex; }
+
+.white {
+    width:40px;
+    height:200px;
+    background:white;
+    border:1px solid black;
+    font-size:8px;
+}
+
+.black {
+    width:25px;
+    height:120px;
+    background:black;
+    position:absolute;
+    top:0;
+    color:white;
+    font-size:7px;
+}
+
+.key.active { background:lightgray !important; }
+.black.active { background:gray !important; }
+
+button, select { padding:8px; margin:5px; }
+</style>
+</head>
+
+<body>
+
+<h2>Piano</h2>
+
+<p>Frequency: <span id="freq">440</span> Hz</p>
+<p>Pitch: <span id="note">A4</span></p>
+<p>Chord: <span id="chord">None</span></p>
+
+<select id="songSelect">
+<option value="twinkle">Simple Song</option>
+<option value="campanella">La Campanella</option>
+</select>
+
+<button onclick="playSelectedSong()">Play Song</button>
+
+<canvas id="waveCanvas" width="800" height="200"></canvas>
+
+<div class="container">
+<div class="keyboard">
+<div class="white-keys" id="whiteKeys"></div>
+<div id="blackKeys"></div>
+</div>
+</div>
+
+<script>
+
+// ===== SETUP =====
+const whiteContainer = document.getElementById("whiteKeys");
+const blackContainer = document.getElementById("blackKeys");
+
+const freqDisplay = document.getElementById("freq");
+const noteDisplay = document.getElementById("note");
+const chordDisplay = document.getElementById("chord");
+
+const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+const noteMap = {};
+const keyMap = {};
+
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+let activeOscillators = {};
+let activeNotes = new Set();
+let activePointers = {};
+let currentFreq = 440;
+
+// ===== BUILD PIANO =====
+function getFreq(n){
+    return 440*Math.pow(2,(n-69)/12);
+}
+
+for(let i=21;i<=108;i++){
+
+    let name = noteNames[i%12];
+    let octave = Math.floor(i/12)-1;
+    let fullName = name+octave;
+    let freq = getFreq(i);
+    let isBlack = name.includes("#");
+
+    let key = document.createElement("div");
+    key.className = "key "+(isBlack?"black":"white");
+    key.innerText = fullName;
+
+    noteMap[fullName] = freq;
+    keyMap[fullName] = key;
+
+    if(!isBlack){
+        whiteContainer.appendChild(key);
+    } else {
+        let offsets = {1:25,3:65,6:145,8:185,10:225};
+        let octaveShift = Math.floor((i-21)/12)*280;
+        key.style.left = (offsets[i%12]+octaveShift)+"px";
+        blackContainer.appendChild(key);
+    }
+
+    key.addEventListener("pointerdown",(e)=>{
+        e.preventDefault();
+        key.setPointerCapture(e.pointerId);
+        startNote(freq,fullName,key);
+        activePointers[e.pointerId] = fullName;
+    });
+
+    key.addEventListener("pointerup",(e)=>stopPointer(e.pointerId));
+    key.addEventListener("pointercancel",(e)=>stopPointer(e.pointerId));
+}
+
+// ===== POINTER STOP =====
+function stopPointer(id){
+    let note = activePointers[id];
+    if(note){
+        stopNote(note);
+        delete activePointers[id];
+    }
+}
+
+// ===== AUDIO =====
+function startNote(freq,name,key){
+
+    activeNotes.add(name);
+    detectChord();
+
+    key.classList.add("active");
+
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.value = freq;
+
+    gain.gain.setValueAtTime(0,audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.05);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+
+    activeOscillators[name] = {osc,gain};
+
+    currentFreq = freq;
+    freqDisplay.textContent = freq.toFixed(2);
+    noteDisplay.textContent = name;
+}
+
+function stopNote(name){
+
+    activeNotes.delete(name);
+    detectChord();
+
+    let obj = activeOscillators[name];
+
+    if(obj){
+        obj.gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.05);
+        setTimeout(()=>obj.osc.stop(),60);
+        delete activeOscillators[name];
+    }
+
+    keyMap[name].classList.remove("active");
+}
+
+// ===== CHORD DETECTION =====
+function detectChord(){
+
+    let notes = Array.from(activeNotes).map(n=>n.slice(0,-1));
+
+    if(notes.length<3){
+        chordDisplay.textContent="None";
+        return;
+    }
+
+    const chords = [
+        {notes:["C","E","G"], name:"C Major"},
+        {notes:["A","C","E"], name:"A Minor"},
+        {notes:["D","F","A"], name:"D Minor"},
+        {notes:["G","B","D"], name:"G Major"}
+    ];
+
+    for(let c of chords){
+        if(c.notes.every(n=>notes.includes(n))){
+            chordDisplay.textContent = c.name;
+            return;
+        }
+    }
+
+    chordDisplay.textContent="Unknown";
+}
+
+// ===== SONGS =====
+const songs = {
+
+twinkle:[
+{note:"C4",duration:400},
+{note:"G4",duration:400},
+{note:"A4",duration:400},
+{note:"G4",duration:800}
+],
+
+campanella:[
+{note:"E5",duration:200},
+{note:"G5",duration:200},
+{note:"E6",duration:200},
+{note:"D6",duration:200},
+{note:"B5",duration:200},
+{note:"G5",duration:200},
+{note:"E5",duration:400},
+
+{note:"B5",duration:200},
+{note:"D6",duration:200},
+{note:"E6",duration:400},
+{note:"D6",duration:200},
+{note:"B5",duration:200},
+{note:"G5",duration:400}
+]
+
+};
+
+async function playSelectedSong(){
+
+    let selected = document.getElementById("songSelect").value;
+    let song = songs[selected];
+
+    for(let s of song){
+        startNote(noteMap[s.note],s.note,keyMap[s.note]);
+        await new Promise(r=>setTimeout(r,s.duration));
+        stopNote(s.note);
+    }
+}
+
+// ===== KEYBOARD INPUT =====
+const keyboardMap = {
+"z":"C4","s":"C#4","x":"D4","d":"D#4","c":"E4",
+"v":"F4","g":"F#4","b":"G4","h":"G#4",
+"n":"A4","j":"A#4","m":"B4",
+
+"q":"C5","2":"C#5","w":"D5","3":"D#5","e":"E5",
+"r":"F5","5":"F#5","t":"G5","6":"G#5",
+"y":"A5","7":"A#5","u":"B5"
+};
+
+let pressedKeys = {};
+
+document.addEventListener("keydown",(e)=>{
+    let k = e.key.toLowerCase();
+    if(keyboardMap[k] && !pressedKeys[k]){
+        pressedKeys[k]=true;
+        let n = keyboardMap[k];
+        startNote(noteMap[n],n,keyMap[n]);
+    }
+});
+
+document.addEventListener("keyup",(e)=>{
+    let k = e.key.toLowerCase();
+    if(keyboardMap[k]){
+        pressedKeys[k]=false;
+        stopNote(keyboardMap[k]);
+    }
+});
+
+// ===== GRAPH =====
+const canvas = document.getElementById("waveCanvas");
+const ctx = canvas.getContext("2d");
+
+function drawWave(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.beginPath();
+
+    for(let x=0;x<canvas.width;x++){
+        let y = 100+50*Math.sin((x*currentFreq)*0.01);
+        ctx.lineTo(x,y);
+    }
+
+    ctx.stroke();
+    requestAnimationFrame(drawWave);
+}
+
+drawWave();
+
+</script>
+
+</body>
+</html>
