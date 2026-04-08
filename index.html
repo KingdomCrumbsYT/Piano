@@ -69,7 +69,6 @@ button, select { padding:8px; margin:5px; }
 
 <script>
 
-// ===== SETUP =====
 const whiteContainer = document.getElementById("whiteKeys");
 const blackContainer = document.getElementById("blackKeys");
 
@@ -89,7 +88,6 @@ let activeNotes = new Set();
 let activePointers = {};
 let currentFreq = 440;
 
-// ===== BUILD PIANO =====
 function getFreq(n){
     return 440*Math.pow(2,(n-69)/12);
 }
@@ -129,7 +127,6 @@ for(let i=21;i<=108;i++){
     key.addEventListener("pointercancel",(e)=>stopPointer(e.pointerId));
 }
 
-// ===== POINTER STOP =====
 function stopPointer(id){
     let note = activePointers[id];
     if(note){
@@ -138,7 +135,6 @@ function stopPointer(id){
     }
 }
 
-// ===== AUDIO =====
 function startNote(freq,name,key){
 
     activeNotes.add(name);
@@ -182,7 +178,6 @@ function stopNote(name){
     keyMap[name].classList.remove("active");
 }
 
-// ===== CHORD DETECTION =====
 function detectChord(){
 
     let notes = Array.from(activeNotes).map(n=>n.slice(0,-1));
@@ -209,7 +204,6 @@ function detectChord(){
     chordDisplay.textContent="Unknown";
 }
 
-// ===== SONGS =====
 const songs = {
 
 twinkle:[
@@ -250,7 +244,6 @@ async function playSelectedSong(){
     }
 }
 
-// ===== KEYBOARD INPUT =====
 const keyboardMap = {
 "z":"C4","s":"C#4","x":"D4","d":"D#4","c":"E4",
 "v":"F4","g":"F#4","b":"G4","h":"G#4",
@@ -280,7 +273,6 @@ document.addEventListener("keyup",(e)=>{
     }
 });
 
-// ===== GRAPH =====
 const canvas = document.getElementById("waveCanvas");
 const ctx = canvas.getContext("2d");
 
